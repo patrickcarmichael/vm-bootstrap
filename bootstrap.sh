@@ -27,6 +27,9 @@
 #   log:    ~/bootstrap-<date>.log
 
 set -euo pipefail
+# $USER/$HOME are unset in containers, cloud-init and cron — derive them.
+USER="${USER:-$(id -un)}"; export USER
+HOME="${HOME:-$(getent passwd "$USER" | cut -d: -f6)}"; export HOME
 
 BOOTSTRAP_USER="${BOOTSTRAP_USER:-patrick}"
 GITHUB_USER="${GITHUB_USER:-patrickcarmichael}"
@@ -113,7 +116,9 @@ if [[ $EUID -eq 0 && "$USER" != "$BOOTSTRAP_USER" ]]; then
   fi
 
   # hand off: copy script, re-run as the user with the same env
-  cp "$0" "$H/bootstrap.sh"; chown "$BOOTSTRAP_USER:$BOOTSTRAP_USER" "$H/bootstrap.sh"
+  if [[ -f "$0" ]]; then cp "$0" "$H/bootstrap.sh"
+  else curl -fsSL "${BOOTSTRAP_URL:-https://raw.githubusercontent.com/patrickcarmichael/vm-bootstrap/main/bootstrap.sh}" -o "$H/bootstrap.sh"; fi
+  chown "$BOOTSTRAP_USER:$BOOTSTRAP_USER" "$H/bootstrap.sh"
   info "re-running as $BOOTSTRAP_USER"
   exec sudo -u "$BOOTSTRAP_USER" -H --preserve-env=BOOTSTRAP_USER,GITHUB_USER,WITH_TAILSCALE,WITH_CLOUDFLARED,WITH_HERDR,WITH_AGENTS,WITH_ZSH,WITH_DOCKER,WITH_WRANGLER,WITH_UFW,WITH_SWAP,SWAP_GB,HOSTNAME_NEW,TZ_NEW,GIT_NAME,GIT_EMAIL,DOTFILES_REPO,TS_AUTHKEY,CF_TUNNEL_TOKEN \
     bash "$H/bootstrap.sh"
