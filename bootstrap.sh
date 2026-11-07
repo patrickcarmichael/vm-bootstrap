@@ -564,7 +564,7 @@ echo
 # standing logins, only if not already done
 gh auth status >/dev/null 2>&1          || todo 'GitHub CLI: `gh auth login`'
 [[ -f "$HOME/.config/atuin/session" ]]  || todo 'Atuin history sync: `atuin register` (first host) or `atuin login`'
-[[ -f "$HOME/.claude/.credentials.json" || -f "$HOME/.claude.json" ]] || todo 'Claude Code: run `claude` once to log in'
+[[ -f "$HOME/.claude/.credentials.json" ]] || todo 'Claude Code: run `claude` once to log in'
 [[ -f "$HOME/.codex/auth.json" ]]       || todo 'Codex: run `codex` once to log in'
 has herdr && todo 'Start the agent runtime: `herdr`'
 [[ $WITH_TAILSCALE == 1 ]] && todo 'Tighten later: PermitRootLogin no in /etc/ssh/sshd_config.d/10-bootstrap.conf once Tailscale SSH is confirmed'
