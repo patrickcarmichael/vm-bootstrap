@@ -244,7 +244,7 @@ MISE_TOOLS=(
 )
 [[ $WITH_HERDR == 1 ]]    && MISE_TOOLS+=(herdr)
 [[ $WITH_WRANGLER == 1 ]] && MISE_TOOLS+=(npm:wrangler)
-[[ $WITH_AGENTS == 1 ]]   && MISE_TOOLS+=(npm:@anthropic-ai/claude-code npm:@openai/codex)
+[[ $WITH_AGENTS == 1 ]]   && MISE_TOOLS+=(npm:@openai/codex)   # claude-code via native installer below (npm backend skips its postinstall)
 
 info "mise tools: ${MISE_TOOLS[*]}"
 for t in "${MISE_TOOLS[@]}"; do
@@ -256,7 +256,10 @@ if [[ $WITH_HERDR == 1 ]] && ! has herdr; then
   curl -fsSL https://herdr.dev/install.sh | sh && ok "herdr (installer)" || warn "herdr install failed"
 fi
 if [[ $WITH_AGENTS == 1 ]]; then
-  has claude || { curl -fsSL https://claude.ai/install.sh | bash && ok "claude (native installer)" || warn "claude install failed"; }
+  # remove a hollow mise/npm shim if one exists from an earlier run
+  mise ls npm:@anthropic-ai/claude-code >/dev/null 2>&1 && mise uninstall -y npm:@anthropic-ai/claude-code >/dev/null 2>&1 || true
+  if [[ -x "$HOME/.local/bin/claude" ]]; then ok "claude $("$HOME/.local/bin/claude" --version 2>/dev/null | head -1)"
+  else curl -fsSL https://claude.ai/install.sh | bash && ok "claude (native installer)" || warn "claude install failed"; fi
 fi
 
 # ---------- tailscale ----------

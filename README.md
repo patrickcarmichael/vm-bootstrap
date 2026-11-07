@@ -32,7 +32,7 @@ Safe to repeat -- every step is guarded.
 | System | user + sudo, GitHub SSH keys, sshd keys-only (port 22 stays public), unattended upgrades, hostname/timezone, swapfile, ufw (22/tcp, mosh UDP, tailscale0) |
 | Base | curl git build-essential tmux mosh zsh unzip jq htop vim … |
 | mise | herdr atuin gh zoxide fzf ripgrep fd bat eza starship lazygit delta yq uv node@lts |
-| Agents | `@anthropic-ai/claude-code`, `@openai/codex` (`WITH_AGENTS=1`) |
+| Agents | Claude Code (native installer), `@openai/codex` via mise (`WITH_AGENTS=1`) |
 | Net | Tailscale (`TS_AUTHKEY` → `tailscale up --ssh`), cloudflared (`CF_TUNNEL_TOKEN` → systemd service), optional wrangler |
 | Shell | mise/atuin/zoxide/starship wired into `.bashrc` + `.zshrc`, `chsh` → zsh, tmux.conf, git + delta config |
 | Log | `~/bootstrap-<timestamp>.log` |
