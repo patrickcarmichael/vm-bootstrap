@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - run: shellcheck -S warning -e SC2088 bootstrap.sh
+      - run: bash -n bootstrap.sh
+
+  smoke:
+    # Runs the full script inside a container as root → user handoff → tool installs.
+    # Network-touching extras (tailscale/cloudflared) are disabled; mise, herdr, agents are exercised.
+    needs: shellcheck
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, debian:12]
+    container:
+      image: ${{ matrix.image }}
+    env:
+      WITH_TAILSCALE: "0"
+      WITH_CLOUDFLARED: "0"
+      WITH_UFW: "0"
+      WITH_SWAP: "0"
+      WITH_AGENTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: prep container
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq curl ca-certificates openssh-server
+          mkdir -p /run/sshd
+          # the script runs `systemctl`; stub it so it doesn't abort in a container
+          printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/systemctl && chmod +x /usr/local/bin/systemctl
+          printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/hostnamectl && chmod +x /usr/local/bin/hostnamectl
+          printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/timedatectl && chmod +x /usr/local/bin/timedatectl
+      - name: run bootstrap as root (creates patrick, re-execs)
+        run: bash bootstrap.sh
+      - name: verify
+        run: |
+          sudo -u patrick -H bash -lc '
+            set -e
+            export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+            for b in mise tmux mosh zsh gh atuin zoxide fzf rg fd bat eza starship lazygit delta uv node herdr claude codex; do
+              command -v "$b" >/dev/null || { echo "MISSING: $b"; exit 1; }
+            done
+            grep -q "bootstrap.sh" ~/.bashrc
+            grep -q "PasswordAuthentication no" /etc/ssh/sshd_config.d/10-bootstrap.conf
+            echo OK
+          '
