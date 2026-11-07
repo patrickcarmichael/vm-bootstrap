@@ -97,9 +97,10 @@ if [[ $EUID -eq 0 && "$USER" != "$BOOTSTRAP_USER" ]]; then
     esac
     ok "user $BOOTSTRAP_USER"
   fi
+  has sudo || { case $PKG in apt) apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo;; dnf) dnf install -y -q sudo;; pacman) pacman -S --noconfirm --needed sudo;; esac; }
+  mkdir -p /etc/sudoers.d
   echo "$BOOTSTRAP_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/90-$BOOTSTRAP_USER"
   chmod 0440 "/etc/sudoers.d/90-$BOOTSTRAP_USER"
-  has sudo || { case $PKG in apt) apt-get update -qq && apt-get install -y -qq sudo;; dnf) dnf install -y -q sudo;; pacman) pacman -S --noconfirm --needed sudo;; esac; }
   ok "sudoers NOPASSWD"
 
   # ssh keys from github
