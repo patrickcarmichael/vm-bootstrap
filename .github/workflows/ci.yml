@@ -50,10 +50,14 @@ jobs:
           sudo -u patrick -H bash -lc '
             set -e
             export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
-            for b in mise tmux mosh zsh gh atuin zoxide fzf rg fd bat eza starship lazygit delta uv node herdr claude codex; do
+            for b in mise tmux mosh zsh gh atuin zoxide fzf rg fd bat eza starship lazygit delta uv node micro herdr claude codex moshi-hook; do
               command -v "$b" >/dev/null || { echo "MISSING: $b"; exit 1; }
             done
             grep -q "bootstrap.sh" ~/.bashrc
             grep -q "PasswordAuthentication no" /etc/ssh/sshd_config.d/10-bootstrap.conf
+            test -f ~/.ssh/id_ed25519 && test -f ~/.ssh/id_ed25519.pub
+            test -d ~/.tmux/plugins/tpm && grep -q "prefix C-a" ~/.tmux.conf
+            test -f ~/bootstrap-todo.md && grep -q "gh ssh-key add" ~/bootstrap-todo.md
+            cat ~/bootstrap-todo.md
             echo OK
           '

@@ -31,10 +31,13 @@ Safe to repeat -- every step is guarded.
 |---|---|
 | System | user + sudo, GitHub SSH keys, sshd keys-only (port 22 stays public), unattended upgrades, hostname/timezone, swapfile, ufw (22/tcp, mosh UDP, tailscale0) |
 | Base | curl git build-essential tmux mosh zsh unzip jq htop vim … |
-| mise | herdr atuin gh zoxide fzf ripgrep fd bat eza starship lazygit delta yq uv node@lts |
+| mise | herdr atuin gh zoxide fzf ripgrep fd bat eza starship lazygit delta yq uv node@lts micro |
 | Agents | Claude Code (native installer), `@openai/codex` via mise (`WITH_AGENTS=1`) |
 | Net | Tailscale (`TS_AUTHKEY` → `tailscale up --ssh`), cloudflared (`CF_TUNNEL_TOKEN` → systemd service), optional wrangler |
-| Shell | mise/atuin/zoxide/starship wired into `.bashrc` + `.zshrc`, `chsh` → zsh, tmux.conf, git + delta config |
+| Shell | mise/atuin/zoxide/starship wired into `.bashrc` + `.zshrc`, `chsh` → zsh, git + delta config, `micro` as `$EDITOR` |
+| Mobile | tmux tuned for Moshi/Blink: `C-a` prefix, mouse, Alt-arrow panes, Alt-number windows, auto-attach session `main` on ssh/mosh (`NO_TMUX=1` to skip), tpm + resurrect/continuum; `moshi-hook` daemon as a lingering user service (`MOSHI_TOKEN` pairs it) |
+| Keys | `ssh-import-id gh:<user>` for authorized_keys; generates `~/.ssh/id_ed25519` for the user |
+| Todo | writes `~/bootstrap-todo.md` with the remaining manual steps (logins, pairing, key upload) + a tmux cheat sheet |
 | Log | `~/bootstrap-<timestamp>.log` |
 
 ## Env toggles
@@ -67,6 +70,8 @@ config/mise.config.toml      pinned mise versions (optional)
 ```
 
 ## After the first run
+
+See `~/bootstrap-todo.md` on the box — it lists exactly what's still manual. Typically:
 
 ```
 exec $SHELL -l
