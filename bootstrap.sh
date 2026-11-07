@@ -265,7 +265,12 @@ if [[ $WITH_AGENTS == 1 ]]; then
   # remove a hollow mise/npm shim if one exists from an earlier run
   mise ls npm:@anthropic-ai/claude-code >/dev/null 2>&1 && mise uninstall -y npm:@anthropic-ai/claude-code >/dev/null 2>&1 || true
   if [[ -x "$HOME/.local/bin/claude" ]]; then ok "claude $("$HOME/.local/bin/claude" --version 2>/dev/null | head -1)"
-  else curl -fsSL https://claude.ai/install.sh | bash && ok "claude (native installer)" || warn "claude install failed"; fi
+  else
+    for i in 1 2 3; do
+      curl -fsSL --http1.1 https://claude.ai/install.sh | bash && { ok "claude (native installer)"; break; }
+      [[ $i -lt 3 ]] && { warn "claude installer attempt $i failed; retrying"; sleep 5; } || warn "claude install failed (3 attempts)"
+    done
+  fi
 fi
 
 # ---------- moshi-hook (Moshi iOS: Live Activity + approvals for Claude/Codex) ----------
@@ -279,7 +284,7 @@ if [[ $WITH_MOSHI == 1 ]]; then
     fi
     moshi-hook install >/dev/null 2>&1 && ok "moshi-hook: agent hooks written" || warn "moshi-hook install (hooks) failed -- rerun after agents are logged in"
     mkdir -p "$HOME/.config/systemd/user"
-    cat > "$HOME/.config/systemd/user/moshi-hook.service" <<EOF
+    [[ -f "$HOME/.config/systemd/user/moshi-hook.service" ]] || cat > "$HOME/.config/systemd/user/moshi-hook.service" <<EOF
 [Unit]
 Description=moshi-hook daemon (Moshi agent hooks)
 After=network-online.target
