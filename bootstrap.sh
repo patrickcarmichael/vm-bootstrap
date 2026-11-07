@@ -13,7 +13,7 @@
 #   BOOTSTRAP_USER=patrick  GITHUB_USER=patrickcarmichael
 #   WITH_TAILSCALE=1  WITH_CLOUDFLARED=1  WITH_HERDR=1  WITH_AGENTS=1  WITH_ZSH=1
 #   WITH_DOCKER=0     WITH_WRANGLER=0     WITH_UFW=1    WITH_SWAP=1    SWAP_GB=2
-#   HOSTNAME_NEW=""   TZ_NEW="America/New_York"  GIT_NAME=""  GIT_EMAIL=""
+#   HOSTNAME_NEW=""   TZ_NEW="America/New_York"  GIT_NAME=""  GIT_EMAIL=""  SSH_PORT=22
 #   DOTFILES_REPO=""  TS_AUTHKEY=""  CF_TUNNEL_TOKEN=""  MOSHI_TOKEN=""  WITH_MOSHI=1
 #
 # What you get:
@@ -45,6 +45,7 @@ WITH_UFW="${WITH_UFW:-1}"
 WITH_SWAP="${WITH_SWAP:-1}"
 SWAP_GB="${SWAP_GB:-2}"
 HOSTNAME_NEW="${HOSTNAME_NEW:-}"
+SSH_PORT="${SSH_PORT:-22}"
 TZ_NEW="${TZ_NEW:-America/New_York}"
 GIT_NAME="${GIT_NAME:-}"
 GIT_EMAIL="${GIT_EMAIL:-}"
@@ -127,7 +128,7 @@ if [[ $EUID -eq 0 && "$USER" != "$BOOTSTRAP_USER" ]]; then
   else curl -fsSL "${BOOTSTRAP_URL:-https://raw.githubusercontent.com/patrickcarmichael/vm-bootstrap/main/bootstrap.sh}" -o "$H/bootstrap.sh"; fi
   chown "$BOOTSTRAP_USER:$BOOTSTRAP_USER" "$H/bootstrap.sh"
   info "re-running as $BOOTSTRAP_USER"
-  exec sudo -u "$BOOTSTRAP_USER" -H --preserve-env=BOOTSTRAP_USER,GITHUB_USER,WITH_TAILSCALE,WITH_CLOUDFLARED,WITH_HERDR,WITH_AGENTS,WITH_ZSH,WITH_DOCKER,WITH_WRANGLER,WITH_UFW,WITH_SWAP,SWAP_GB,HOSTNAME_NEW,TZ_NEW,GIT_NAME,GIT_EMAIL,DOTFILES_REPO,TS_AUTHKEY,CF_TUNNEL_TOKEN,MOSHI_TOKEN,WITH_MOSHI \
+  exec sudo -u "$BOOTSTRAP_USER" -H --preserve-env=BOOTSTRAP_USER,GITHUB_USER,WITH_TAILSCALE,WITH_CLOUDFLARED,WITH_HERDR,WITH_AGENTS,WITH_ZSH,WITH_DOCKER,WITH_WRANGLER,WITH_UFW,WITH_SWAP,SWAP_GB,HOSTNAME_NEW,TZ_NEW,GIT_NAME,GIT_EMAIL,DOTFILES_REPO,TS_AUTHKEY,CF_TUNNEL_TOKEN,MOSHI_TOKEN,WITH_MOSHI,SSH_PORT \
     bash "$H/bootstrap.sh"
 fi
 
@@ -212,7 +213,8 @@ info "sshd hardening"
 [[ -s "$HOME/.ssh/authorized_keys" ]] || die "no ~/.ssh/authorized_keys for $USER -- add keys before disabling password auth"
 SSHD_D=/etc/ssh/sshd_config.d
 if [[ -d $SSHD_D ]]; then
-  $SUDO tee "$SSHD_D/10-bootstrap.conf" >/dev/null <<'EOF'
+  $SUDO tee "$SSHD_D/10-bootstrap.conf" >/dev/null <<EOF
+Port $SSH_PORT
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
@@ -225,15 +227,16 @@ ClientAliveCountMax 3
 AcceptEnv LANG LC_*
 EOF
 else
-  for kv in "PasswordAuthentication no" "KbdInteractiveAuthentication no" "ChallengeResponseAuthentication no" \
+  for kv in "Port $SSH_PORT" "PasswordAuthentication no" "KbdInteractiveAuthentication no" "ChallengeResponseAuthentication no" \
             "PermitRootLogin prohibit-password" "PubkeyAuthentication yes" "X11Forwarding no" "MaxAuthTries 4"; do
     set_kv /etc/ssh/sshd_config "${kv% *}" "${kv#* }"
   done
 fi
 # cloud-init on Ubuntu ships 50-cloud-init.conf with PasswordAuthentication yes; ours must win (lower number = first = wins)
 if $SUDO sshd -t; then
-  $SUDO systemctl reload ssh 2>/dev/null || $SUDO systemctl reload sshd 2>/dev/null || true
-  ok "sshd: keys only, root prohibit-password, port 22 open"
+  if systemctl is-active ssh.socket >/dev/null 2>&1; then $SUDO systemctl daemon-reload; $SUDO systemctl restart ssh.socket ssh 2>/dev/null || true
+  else $SUDO systemctl reload ssh 2>/dev/null || $SUDO systemctl reload sshd 2>/dev/null || true; fi
+  ok "sshd: port $SSH_PORT, keys only, root prohibit-password"
 else
   warn "sshd config test failed -- not reloading; inspect $SSHD_D/10-bootstrap.conf"
 fi
@@ -311,11 +314,11 @@ if [[ $WITH_TAILSCALE == 1 ]]; then
   has tailscale || curl -fsSL https://tailscale.com/install.sh | sh
   $SUDO systemctl enable --now tailscaled >/dev/null 2>&1 || true
   if [[ -n $TS_AUTHKEY ]]; then
-    $SUDO tailscale up --authkey "$TS_AUTHKEY" --ssh && ok "tailscale up --ssh"
+    $SUDO tailscale up --authkey "$TS_AUTHKEY" --ssh --accept-routes && ok "tailscale up --ssh --accept-routes"
   elif $SUDO tailscale status >/dev/null 2>&1; then
-    ok "tailscale already up"
+    $SUDO tailscale set --ssh --accept-routes >/dev/null 2>&1 && ok "tailscale already up; --ssh --accept-routes set" || ok "tailscale already up"
   else
-    warn "run: sudo tailscale up --ssh"; todo 'Join tailnet: `sudo tailscale up --ssh --accept-routes`'
+    warn "run: sudo tailscale up --ssh --accept-routes"; todo 'Join tailnet: `sudo tailscale up --ssh --accept-routes` (approve the URL, then confirm with `tailscale status --self --json | grep -c SSH_HostKeys` = 1)'
   fi
 fi
 
@@ -357,10 +360,11 @@ if [[ $WITH_UFW == 1 ]] && has ufw; then
   info "ufw"
   $SUDO ufw default deny incoming >/dev/null
   $SUDO ufw default allow outgoing >/dev/null
-  $SUDO ufw allow 22/tcp comment 'ssh (public fallback)' >/dev/null
+  $SUDO ufw allow "$SSH_PORT/tcp" comment 'ssh (public fallback)' >/dev/null
+  [[ $SSH_PORT != 22 ]] && $SUDO ufw delete allow 22/tcp >/dev/null 2>&1 || true
   $SUDO ufw allow 60000:61000/udp comment 'mosh' >/dev/null
   [[ $WITH_TAILSCALE == 1 ]] && $SUDO ufw allow in on tailscale0 comment 'tailnet' >/dev/null
-  $SUDO ufw --force enable >/dev/null && ok "ufw: 22/tcp + mosh udp + tailscale0 (check provider firewall too)"
+  $SUDO ufw --force enable >/dev/null && ok "ufw: $SSH_PORT/tcp + mosh udp + tailscale0 (open $SSH_PORT + 60000-61000/udp in the provider firewall too)"
 fi
 
 # ---------- ssh key for $USER ----------
@@ -581,8 +585,11 @@ TS_IP="$(tailscale ip -4 2>/dev/null || echo '<tailscale-ip>')"
   echo "## Connect"
   echo
   echo '```'
-  echo "mosh $USER@$(hostname -s)    # or over tailnet: mosh $USER@$TS_IP"
-  echo "ssh  $USER@$(hostname -s)    # lands in tmux session 'main'; NO_TMUX=1 ssh ... to skip"
+  PFLAG=""; MFLAG=""; [[ $SSH_PORT != 22 ]] && { PFLAG=" -p $SSH_PORT"; MFLAG=" --ssh='ssh -p $SSH_PORT'"; }
+  echo "ssh $PFLAG $USER@$(hostname -s)              # public, key-only; lands in tmux 'main' (NO_TMUX=1 ssh ... to skip)"
+  echo "mosh$MFLAG $USER@$(hostname -s)   # public"
+  echo "ssh  $USER@$TS_IP                  # tailnet (Tailscale SSH, any port)"
+  echo "mosh $USER@$TS_IP                  # tailnet"
   echo '```'
   echo
   echo "## tmux (prefix = Ctrl-a)"
